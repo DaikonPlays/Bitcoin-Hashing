@@ -27,6 +27,7 @@ logic [15:0] cur_addr;
 logic [31:0] cur_write_data;
 logic [511:0] memory_block;
 logic [ 7:0] tstep;
+parameter integer MESSAGE_SIZE = NUM_OF_WORDS * 32;
 
 // SHA256 K constants
 parameter int k[0:63] = '{
@@ -170,18 +171,21 @@ begin
         if(((currentBlock-1)*16+j) < NUM_OF_WORDS) begin //check math
           w[j] <= message[j];
         end
-
-
-
-
-   
-
-
-
-
-    
-
-    end
+        else if((j==15) & (currentBlock == num_blocks)) begin
+            w[15] <= MESSAGE_SIZE[31:0]; //change this
+        end
+        else if(((currentBlock-1)*16+j) == NUM_OF_WORDS) begin
+            w[j] <= {1'h1, 31'h0};
+        end
+        else begin 
+            w[j] <= 32'h00000000;
+        end
+      end
+      i <= 0; j <= 0;
+			{A, B, C, D, E, F, G, H} <= {h0, h1, h2, h3, h4, h5, h6, h7};
+			offset <= 0;
+			state <= COMPUTE;
+		end
 
     // For each block compute hash function
     // Go back to BLOCK stage after each block hash computation is completed and if
@@ -190,7 +194,11 @@ begin
     COMPUTE: begin
 	// 64 processing rounds steps for 512-bit block 
         if (i <= 64) begin
-
+          {A, B, C, D, E, F, G, H} <= sha256_op{A, B, C, D, E, F, G, H, w[0] , i};
+          for(j=0; j < 15; j++) begin
+            w[j] <= w[j+1];
+          end
+          //might need to increment another counter function
 
 
 
