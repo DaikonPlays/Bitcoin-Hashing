@@ -120,7 +120,7 @@ begin
        h7 <= 32'h5be0cd19;
       cur_addr <= message_addr;
       offset <= 0;
-      enable_write <= 0;
+      cur_we <= 0;
       i <= 0; j <= 0;
       currentBlock <= 1; 
       present_write_data <= 0;
@@ -136,10 +136,29 @@ begin
             offset = offset + 1;
           end
           else if(offset < 16)begin
-              message[offset-1] <= memory_read_data;
+              message[offset-1] <= mem_read_data;
               offset = offset + 1;
               state <= READ;
           end
+          else begin
+              message[offset - 1] <= mem_read_data;
+              state <= BLOCK;
+          end
+      end
+      else begin
+          if(offset == 0) begin
+              offset = offset + 1;
+          end
+          else if(offset <= NUM_OF_WORDS % 16) begin
+            message[offset - 1] <= mem_read_data;
+            offset++;
+            state <= READ;
+          end
+          else begin 
+              state <= BLOCK;
+          end
+      end
+    end
 
     // SHA-256 FSM 
     // Get a BLOCK from the memory, COMPUTE Hash output using SHA256 function    
@@ -147,7 +166,11 @@ begin
     BLOCK: begin
 	// Fetch message in 512-bit block size
 	// For each of 512-bit block initiate hash value computation
-       
+      for(j=0l j < 16; j++) begin
+        if(((currentBlock-1)*16+j) < NUM_OF_WORDS) begin //check math
+          w[j] <= message[j];
+        end
+
 
 
 
