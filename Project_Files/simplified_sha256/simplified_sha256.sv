@@ -30,6 +30,7 @@ logic [31:0] cur_write_data;
 logic [511:0] memory_block;
 logic [ 7:0] tstep;
 parameter integer MESSAGE_SIZE = NUM_OF_WORDS * 32;
+logic [31:0] s0, s1;
 
 // SHA256 K constants
 parameter int k[0:63] = '{
@@ -52,7 +53,9 @@ assign tstep = (i - 1);
 function logic [15:0] determine_num_blocks(input logic [31:0] size);
 
   // Student to add function implementation
-  determine_num_blocks = ((NUM_OF_WORDS)/16) + 1; 
+  //+2 to account for the message length
+  //+1 to account for appeneded 1 after message + padded 0's
+  determine_num_blocks = ((NUM_OF_WORDS+2)/16) + 1; 
 endfunction
 
 
@@ -73,7 +76,6 @@ begin
     sha256_op = {t1 + t2, a, b, c, d + t1, e, f, g};
 end
 endfunction
-
 
 // Generate request to memory
 // for reading from memory to get original message
@@ -121,6 +123,7 @@ begin
        h5 <= 32'h9b05688c;
        h6 <= 32'h1f83d9ab;
        h7 <= 32'h5be0cd19;
+      // we need to initialize a,b,c,d,e,f,g but it might already be passed from the other function
       cur_addr <= message_addr;
       offset <= 0;
       cur_we <= 0;
@@ -149,12 +152,10 @@ begin
           end
       end
       else begin
-          if(offset == 0) begin
-              offset = offset + 1;
-          end
+          if(offset == 0) offset = offset + 1;
           else if(offset <= NUM_OF_WORDS % 16) begin
             message[offset - 1] <= mem_read_data;
-            offset++;
+            offset = offset + 1;
             state <= READ;
           end
           else begin 
@@ -200,25 +201,28 @@ begin
           for(j=0; j < 15; j++) begin
             w[j] <= w[j+1];
           end
-          //might need to increment another counter function
-          i = i + 1;
-
+          //15th value is different
+            s0 = rightrotate(w[1], 7) ^ rightrotate(w[1], 18) ^ (w[1] >> 3);
+            s1 = rightrotate(w[14], 17) ^ rightrotate(w[t-2], 19) ^ (w[t-2] >> 10);
+            w[15] = w[0] + s0 + w[9] + s1;
+             i = i + 1;
+            state <= COMPUTE;
         end
         else begin
-          h0 = h0 + A;
-          h1 = h1 + B;
-          h2 = h2 + C;
-          h3 = h3 + D;
-          h4 = h4 + E;
-          h5 = h5 + F;
-          h6 = h6 + G;
-          h7 = h7 + H;
-          i = 0;
-          currentBlock = currentBlock + 1;
+          h0 <= h0 + A;
+          h1 <= h1 + B;
+          h2 <= h2 + C;
+          h3 <= h3 + D;
+          h4 <= h4 + E;
+          h5 <= h5 + F;
+          h6 <= h6 + G;
+          h7 <= h7 + H;
+          i <= 0;
+          currentBlock <= currentBlock + 1;
           if(currentBlock < num_blocks) begin
-            state = READ;
+            state <= READ;
           end else begin
-            state = WRITE;
+            state <= WRITE;
           end
         end
     end
@@ -228,23 +232,23 @@ begin
     // write back these h0 to h7 to memory starting from output_addr
     WRITE: begin
     if (offset < 8) begin
-        cur_addr = output_addr + offset;
+        cur_addr <= output_addr + offset;
         case (offset)
-            0: cur_write_data = h0;
-            1: cur_write_data = h1;
-            2: cur_write_data = h2;
-            3: cur_write_data = h3;
-            4: cur_write_DATA = h4;
-            5: cur_write_DATA = h5;
-            6: cur_write_DATA = h6;
-            7: cur_write_DATA = h7;
+            0: cur_write_data <= h0;
+            1: cur_write_data <= h1;
+            2: cur_write_data <= h2;
+            3: cur_write_data <= h3;
+            4: cur_write_DATA <= h4;
+            5: cur_write_DATA <= h5;
+            6: cur_write_DATA <= h6;
+            7: cur_write_DATA <= h7;
         endcase
-        cur_we = 1'b1;
-        offset = offset + 1;
+        cur_we <= 1'b1;
+        offset <= offset + 1;
     end else begin
-        cur_we = 0;
-        state = IDLE;
-        done = 1'b1; 
+        cur_we <= 0;
+        state <= IDLE;
+        done <= 1'b1; 
     end
     end
    endcase
