@@ -248,7 +248,6 @@ begin
     end else begin
         cur_we <= 0;
         state <= IDLE;
-        done <= 1'b1; 
     end
     end
    endcase
