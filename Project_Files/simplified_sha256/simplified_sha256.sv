@@ -246,7 +246,6 @@ begin
         cur_we <= 1'b1;
         offset <= offset + 1;
     end else begin
-        cur_we <= 0;
         state <= IDLE;
     end
     end
