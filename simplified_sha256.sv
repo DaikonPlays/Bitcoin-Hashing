@@ -25,6 +25,7 @@ logic [ 7:0] num_blocks;
 logic [ 7:0] currentBlock;
 logic        cur_we;
 logic [15:0] cur_addr;
+logic [15:0] offset;
 logic [31:0] cur_write_data;
 logic [511:0] memory_block;
 logic [ 7:0] tstep;
@@ -226,12 +227,25 @@ begin
     // h0 to h7 after compute stage has final computed hash value
     // write back these h0 to h7 to memory starting from output_addr
     WRITE: begin
-      currentBlock <= 1;
-      case(i) 
-        0: cur_write_data
-      endcase
-
-
+    if (offset < 8) begin
+        cur_addr = output_addr + offset;
+        case (offset)
+            0: cur_write_data = h0;
+            1: cur_write_data = h1;
+            2: cur_write_data = h2;
+            3: cur_write_data = h3;
+            4: cur_write_DATA = h4;
+            5: cur_write_DATA = h5;
+            6: cur_write_DATA = h6;
+            7: cur_write_DATA = h7;
+        endcase
+        cur_we = 1'b1;
+        offset = offset + 1;
+    end else begin
+        cur_we = 0;
+        state = IDLE;
+        done = 1'b1; 
+    end
     end
    endcase
   end
