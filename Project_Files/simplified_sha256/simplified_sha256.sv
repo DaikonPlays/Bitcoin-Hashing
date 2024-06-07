@@ -25,7 +25,6 @@ logic [ 7:0] num_blocks;
 logic [ 7:0] currentBlock;
 logic        cur_we;
 logic [15:0] cur_addr;
-logic [15:0] offset;
 logic [31:0] cur_write_data;
 logic [511:0] memory_block;
 logic [ 7:0] tstep;
@@ -138,9 +137,8 @@ begin
     end
     READ: begin
       if(currentBlock < num_blocks)begin 
-          if(offset == 0)begin
+          if(offset == 0)
             offset = offset + 1;
-          end
           else if(offset < 16)begin
               message[offset-1] <= mem_read_data;
               offset = offset + 1;
@@ -152,7 +150,8 @@ begin
           end
       end
       else begin
-          if(offset == 0) offset = offset + 1;
+          if(offset == 0) 
+            offset = offset + 1;
           else if(offset <= NUM_OF_WORDS % 16) begin
             message[offset - 1] <= mem_read_data;
             offset = offset + 1;
@@ -197,32 +196,36 @@ begin
     COMPUTE: begin
 	// 64 processing rounds steps for 512-bit block 
         if (i <= 64) begin
-          {A, B, C, D, E, F, G, H} <= sha256_op{A, B, C, D, E, F, G, H, w[0] , i};
+          {a, b, c, d, e, f, g, h} <= sha256_op(a, b, c, d, e, f, g, h, w[0] , i);
           for(j=0; j < 15; j++) begin
             w[j] <= w[j+1];
           end
           //15th value is different
-            s0 = rightrotate(w[1], 7) ^ rightrotate(w[1], 18) ^ (w[1] >> 3);
-            s1 = rightrotate(w[14], 17) ^ rightrotate(w[t-2], 19) ^ (w[t-2] >> 10);
-            w[15] = w[0] + s0 + w[9] + s1;
-             i = i + 1;
+            s0 <= rightrotate(w[1], 7) ^ rightrotate(w[1], 18) ^ (w[1] >> 3);
+            s1 <= rightrotate(w[14], 17) ^ rightrotate(w[14], 19) ^ (w[14] >> 10);
+            w[15] <= w[0] + s0 + w[9] + s1;
+             i <= i + 1;
             state <= COMPUTE;
         end
         else begin
-          h0 <= h0 + A;
-          h1 <= h1 + B;
-          h2 <= h2 + C;
-          h3 <= h3 + D;
-          h4 <= h4 + E;
-          h5 <= h5 + F;
-          h6 <= h6 + G;
-          h7 <= h7 + H;
-          i <= 0;
-          currentBlock <= currentBlock + 1;
-          if(currentBlock < num_blocks) begin
-            state <= READ;
-          end else begin
+          h0 <= h0 + a;
+          h1 <= h1 + b;
+          h2 <= h2 + c;
+          h3 <= h3 + d;
+          h4 <= h4 + e;
+          h5 <= h5 + f;
+          h6 <= h6 + g;
+          h7 <= h7 + h;
+          i <= 0; offset <= 0;
+          if(currentBlock == num_blocks)begin
+            cur_addr <= output_addr;
+            cur_we <= 1; 
             state <= WRITE;
+          end
+          else begin
+          currentBlock <= currentBlock + 1;
+          j <= 0;
+          state <= READ;
           end
         end
     end
@@ -231,17 +234,17 @@ begin
     // h0 to h7 after compute stage has final computed hash value
     // write back these h0 to h7 to memory starting from output_addr
     WRITE: begin
+      currentBlock <= 1;
     if (offset < 8) begin
-        cur_addr <= output_addr + offset;
         case (offset)
             0: cur_write_data <= h0;
             1: cur_write_data <= h1;
             2: cur_write_data <= h2;
             3: cur_write_data <= h3;
-            4: cur_write_DATA <= h4;
-            5: cur_write_DATA <= h5;
-            6: cur_write_DATA <= h6;
-            7: cur_write_DATA <= h7;
+            4: cur_write_data <= h4;
+            5: cur_write_data <= h5;
+            6: cur_write_data <= h6;
+            7: cur_write_data <= h7;
         endcase
         cur_we <= 1'b1;
         offset <= offset + 1;
