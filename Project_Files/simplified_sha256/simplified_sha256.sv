@@ -19,9 +19,10 @@ logic [31:0] message[20];
 logic [31:0] wt;
 logic [31:0] h0, h1, h2, h3, h4, h5, h6, h7;
 logic [31:0] a, b, c, d, e, f, g, h;
-logic [ 7:0] i, j, writecase;
+logic [ 7:0] i, j;
 logic [15:0] offset; // in word address
 logic [ 7:0] num_blocks;
+logic [ 7:0] test;
 logic [ 7:0] currentBlock;
 logic        cur_we;
 logic [15:0] cur_addr;
@@ -124,10 +125,10 @@ begin
        h5 <= 32'h9b05688c;
        h6 <= 32'h1f83d9ab;
        h7 <= 32'h5be0cd19;
-      // we need to initialize a,b,c,d,e,f,g but it might already be passed from the other function
       cur_addr <= message_addr;
       offset <= 0;
       cur_we <= 0;
+      test <= 0;
       i <= 0; j <= 0;
       currentBlock <= 1; 
       cur_write_data <= 0;
@@ -142,7 +143,7 @@ begin
           if(offset == 0)
             offset = offset + 1;
           else if(offset < 16)begin
-              message[offset-1] <= mem_read_data;
+              message[offset - 1] <= mem_read_data;
               offset = offset + 1;
               state <= READ;
           end
@@ -171,26 +172,28 @@ begin
     BLOCK: begin
 	// Fetch message in 512-bit block size
 	// For each of 512-bit block initiate h value computation
-      for(j=0; j < 16; j++) begin
-        if(((currentBlock-1)*16+j) < NUM_OF_WORDS) begin //check math
+  		{a, b, c, d, e, f, g, h} <= {h0, h1, h2, h3, h4, h5, h6, h7};
+      for(j = 0; j < 16; j++) begin
+        if(j < NUM_OF_WORDS && (currentBlock == 4'h1)) begin
           w[j] <= message[j];
+        end  
+        else if((currentBlock == 4'h2) && j < 4) begin
+          w[j] <= message[j];
+        end         
+        else if((j == 15) & (currentBlock == 4'h2)) begin
+            w[15] <= MESSAGE_SIZE[31:0]; 
         end
-        else if((j==15) & (currentBlock == num_blocks)) begin
-            w[15] <= MESSAGE_SIZE[31:0]; //change this
-        end
-        else if(((currentBlock-1)*16+j) == NUM_OF_WORDS) begin
-            w[j] <= {1'h1, 31'h0};
+        else if((j + 16) == NUM_OF_WORDS) begin
+            w[j] <= 32'h80000000;
         end
         else begin 
             w[j] <= 32'h00000000;
         end
       end
       i <= 0; j <= 0;
-			{a, b, c, d, e, f, g, h} <= {h0, h1, h2, h3, h4, h5, h6, h7};
 			offset <= 0;
 			state <= COMPUTE;
 		end
-
     // For each block compute h function
     // Go back to BLOCK stage after each block h computation is completed and if
     // there are still number of message blocks available in memory otherwise
@@ -198,74 +201,90 @@ begin
     COMPUTE: begin
 	// 64 processing rounds steps for 512-bit block 
       if(i < 64) begin
-			{a, b, c, d, e, f, g, h} <= sha256_op(a, b, c, d, e, f, g, h, w[0], i);
-			//right shift by 1
-			for(j = 0; j < 15; j++) begin
-				w[j] <= w[j+1];
-			end
-			//calc new w[15]
-			s0 = rightrotate(w[1], 7) ^ rightrotate(w[1], 18) ^ (w[1] >> 3);
-		  s1 = rightrotate(w[14], 17) ^ rightrotate(w[14], 19) ^ (w[14] >> 10);
-		  w[15] = w[0] + s0 + w[9] + s1;
-			// w[15] <= 0;
-
-			i = i + 1;
-			state <= COMPUTE;
+        {a, b, c, d, e, f, g, h} <= sha256_op(a, b, c, d, e, f, g, h, w[0], i);
+        for(j = 0; j < 15; j++) begin
+          w[j] <= w[j + 1];
+        end
+        s0 = rightrotate(w[1], 7) ^ rightrotate(w[1], 18) ^ (w[1] >> 3);
+        s1 = rightrotate(w[14], 17) ^ rightrotate(w[14], 19) ^ (w[14] >> 10);
+        w[15] = s0 + s1 + w[0] + w[9];
+        i = i + 1;
+        state <= COMPUTE;
+		  end
+		  else begin
+        h0 <= h0 + a;
+        h1 <= h1 + b;
+        h2 <= h2 + c;
+        h3 <= h3 + d;
+        h4 <= h4 + e;
+        h5 <= h5 + f;
+        h6 <= h6 + g;
+        h7 <= h7 + h;  
+        //{h0, h1, h2, h3, h4, h5, h6, h7} <= {h0, h1, h2, h3, h4, h5, h6, h7} + {a, b, c, d, e, f, g, h};
+         if(currentBlock == num_blocks) begin 
+          i <= 0;
+          cur_addr <= output_addr;
+          state <= WRITE;
+          offset <= 0;
+          cur_we <= 1;
+        end
+        else begin
+          currentBlock <= currentBlock + 1; 
+          state <= READ;
+        end
+		  end
 		end
-		else begin
-			h0 <= h0 + a;
-			h1 <= h1 + b;
-			h2 <= h2 + c;
-			h3 <= h3 + d;
-			h4 <= h4 + e;
-			h5 <= h5 + f;
-			h6 <= h6 + g;
-			h7 <= h7 + h;
-      i <= 0;
-			if(currentBlock == num_blocks)begin //last block
-				cur_addr <= output_addr;
-				state <= WRITE;
-				offset <= 0;
-				cur_we <= 1;
-			end
-			else begin //still have more blocks
-				currentBlock = currentBlock + 1; //might need currentBlock <= currentBlock + 1;
-				j <= 0;
-				state <= READ;
-			end
-		end
-		end
+		// COMPUTE: begin
+		// // 64 processing rounds steps for 512-bit block 
+		// if(i < 64) begin
+    //    {a, b, c, d, e, f, g, h} <= sha256_op(a, b, c, d, e, f, g, h, w[0], i);
+		// 	//right shift by 1
+		// 	for(j = 0; j < 15; j++) begin
+		// 		w[j] <= w[j+1];
+		// 	end
+		// 	//calc new w[15]
+    //     s0 = rightrotate(w[1], 7) ^ rightrotate(w[1], 18) ^ (w[1] >> 3);
+    //     s1 = rightrotate(w[14], 17) ^ rightrotate(w[14], 19) ^ (w[14] >> 10);
+    //     w[15] = s0 + s1 + w[0] + w[9];
+		// 	// w[15] <= 0;
 
-    // h0 to h7 each are 32 bit hes, which makes up total 256 bit value
-    // h0 to h7 after compute stage has final computed h value
-    // write back these h0 to h7 to memory starting from output_addr
-//    WRITE: begin
-//      currentBlock <= 1;
-//    if (offset < 8) begin
-//        case (offset)
-//            0: cur_write_data <= h0;
-//            1: cur_write_data <= h1;
-//            2: cur_write_data <= h2;
-//            3: cur_write_data <= h3;
-//            4: cur_write_data <= h4;
-//            5: cur_write_data <= h5;
-//            6: cur_write_data <= h6;
-//            7: cur_write_data <= h7;
-//        endcase
-//        //cur_we <= 1'b1;
-//			offset <= offset + 1;
-//    end else begin
-//        state <= IDLE;
-//    end
-//    end
-
-
+		// 	i++;
+		// 	state <= COMPUTE;
+		// end
+		// else begin
+		// 	//update hashes:
+    //    //{h0, h1, h2, h3, h4, h5, h6, h7} <= {h0, h1, h2, h3, h4, h5, h6, h7} + {a, b, c, d, e, f, g, h};
+		// 	h0 <= h0 + a;
+		// 	h1 <= h1 + b;
+		// 	h2 <= h2 + c;
+		// 	h3 <= h3 + d;
+		// 	h4 <= h4 + e;
+		// 	h5 <= h5 + f;
+		// 	h6 <= h6 + g;
+		// 	h7 <= h7 + h;
+			
+		// 	if(currentBlock == num_blocks)begin //last block
+		// 		offset <= 0;
+    //     cur_addr <= output_addr;
+		// 		cur_we <= 1;
+		// 		i <= 0;
+		// 		state <= WRITE;
+		// 	end
+		// 	else begin //still have more blocks
+		// 		offset <= 0;
+		// 		currentBlock++; //might need currentBlock <= currentBlock + 1;
+		// 		i <= 0;
+		// 		j <= 0;
+		// 		state <= READ;
+		// 	end
+		// end
+		// end
     // h0 to h7 each are 32 bit hes, which makes up total 256 bit value
     // h0 to h7 after compute stage has final computed h value
     // write back these h0 to h7 to memory starting from output_addr
     WRITE: begin
 			currentBlock <= 1;
-			case (writecase) //which write offset we are at
+			case (i) 
 				0: cur_write_data <= h0;				 
 				1: cur_write_data <= h1;				 
 				2: cur_write_data <= h2;			 
@@ -278,34 +297,10 @@ begin
 					state <= IDLE;
 				end
 			endcase
-      writecase = writecase + 1;
-			if(writecase) offset++;
-			// state <= WRITE;
+			if(i != 0) offset++;
+      i = i + 1;
 		end
-    // WRITE: begin
-    //   currentBlock <= 1;
-    // if (writecase < 8) begin
-    //     case (writecase)
-    //         0: cur_write_data <= h0;
-    //         1: cur_write_data <= h1;
-    //         2: cur_write_data <= h2;
-    //         3: cur_write_data <= h3;
-    //         4: cur_write_data <= h4;
-    //         5: cur_write_data <= h5;
-    //         6: cur_write_data <= h6;
-    //         7: cur_write_data <= h7;
-    //     endcase
-    //     //cur_we <= 1'b1;
-    //     if(writecase != 0) begin
-		// 	    offset <= offset + 1;
-    //     end
-    // end else begin
-    //     state <= IDLE;
-    // end
-    //   for(int k = 0; k < 7; k++) begin
-    //     cur_write_data <= 
-    //   end
-    // end
+
    endcase
   end
 
