@@ -53,8 +53,6 @@ assign num_blocks = determine_num_blocks(NUM_OF_WORDS);
 function logic [15:0] determine_num_blocks(input logic [31:0] size);
 
   // Student to add function implementation
-  //+2 to account for the message length
-  //+1 to account for appeneded 1 after message + padded 0's
   determine_num_blocks = ((NUM_OF_WORDS + 2)/16) + 1; 
 endfunction
 
@@ -62,7 +60,7 @@ endfunction
 // SHA256 h round
 function logic [255:0] sha256_op(input logic [31:0] a, b, c, d, e, f, g, h, w,
                                  input logic [7:0] t);
-    logic [31:0] S1, S0, ch, maj, t1, t2; // internal signals
+    logic [31:0] S1, S0, ch, maj, t1, t2; 
 begin
     S1 = rightrotate(e, 6) ^ rightrotate(e, 11) ^ rightrotate(e, 25);
     // Student to add remaning code below
@@ -77,9 +75,6 @@ begin
 end
 endfunction
 
-// Generate request to memory
-// for reading from memory to get original message
-// for writing final computed has value
 assign mem_addr = cur_addr + offset + (currentBlock - 1) * 16;
 assign mem_clk = clk;
 assign mem_write_data = cur_write_data;
@@ -193,7 +188,7 @@ begin
         s1 = rightrotate(w[14], 17) ^ rightrotate(w[14], 19) ^ (w[14] >> 10);
         w[15] = s0 + s1 + w[0] + w[9];
         i = i + 1;
-        state <= COMPUTE;
+        state = COMPUTE;
 		  end
 		  else begin
         h0 <= h0 + a;
