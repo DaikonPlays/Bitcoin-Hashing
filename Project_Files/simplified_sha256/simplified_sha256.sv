@@ -19,7 +19,7 @@ logic [31:0] message[20];
 logic [31:0] wt;
 logic [31:0] h0, h1, h2, h3, h4, h5, h6, h7;
 logic [31:0] a, b, c, d, e, f, g, h;
-logic [ 7:0] i, j;
+logic [ 7:0] i, j, writecase;
 logic [15:0] offset; // in word address
 logic [ 7:0] num_blocks;
 logic [ 7:0] currentBlock;
@@ -28,9 +28,9 @@ logic [15:0] cur_addr;
 logic [31:0] cur_write_data;
 logic [511:0] memory_block;
 logic [ 7:0] tstep;
+logic[2:0] writecase;
 parameter integer MESSAGE_SIZE = NUM_OF_WORDS * 32;
 logic [31:0] s0, s1;
-
 // SHA256 K constants
 parameter int k[0:63] = '{
    32'h428a2f98,32'h71374491,32'hb5c0fbcf,32'he9b5dba5,32'h3956c25b,32'h59f111f1,32'h923f82a4,32'hab1c5ed5,
@@ -109,6 +109,7 @@ begin
   if (!reset_n) begin
     cur_we <= 1'b0;
     state <= IDLE;
+    writecase <= 0;
   end 
   else case (state)
     // Initialize h values h0 to h7 and a to h, other variables and memory we, address offset, etc
@@ -196,7 +197,7 @@ begin
     // move to WRITE stage
     COMPUTE: begin
 	// 64 processing rounds steps for 512-bit block 
-      if(i <= 64) begin
+      if(i < 64) begin
 			{a, b, c, d, e, f, g, h} <= sha256_op(a, b, c, d, e, f, g, h, w[0], i);
 			//right shift by 1
 			for(j = 0; j < 15; j++) begin
@@ -212,7 +213,6 @@ begin
 			state <= COMPUTE;
 		end
 		else begin
-      cur_we <= 1;
 			h0 <= h0 + a;
 			h1 <= h1 + b;
 			h2 <= h2 + c;
@@ -221,11 +221,12 @@ begin
 			h5 <= h5 + f;
 			h6 <= h6 + g;
 			h7 <= h7 + h;
-			offset <= 0;
       i <= 0;
 			if(currentBlock == num_blocks)begin //last block
 				cur_addr <= output_addr;
 				state <= WRITE;
+				offset <= 0;
+				cur_we <= 1;
 			end
 			else begin //still have more blocks
 				currentBlock = currentBlock + 1; //might need currentBlock <= currentBlock + 1;
@@ -238,25 +239,73 @@ begin
     // h0 to h7 each are 32 bit hes, which makes up total 256 bit value
     // h0 to h7 after compute stage has final computed h value
     // write back these h0 to h7 to memory starting from output_addr
+//    WRITE: begin
+//      currentBlock <= 1;
+//    if (offset < 8) begin
+//        case (offset)
+//            0: cur_write_data <= h0;
+//            1: cur_write_data <= h1;
+//            2: cur_write_data <= h2;
+//            3: cur_write_data <= h3;
+//            4: cur_write_data <= h4;
+//            5: cur_write_data <= h5;
+//            6: cur_write_data <= h6;
+//            7: cur_write_data <= h7;
+//        endcase
+//        //cur_we <= 1'b1;
+//			offset <= offset + 1;
+//    end else begin
+//        state <= IDLE;
+//    end
+//    end
+
+
+    // h0 to h7 each are 32 bit hes, which makes up total 256 bit value
+    // h0 to h7 after compute stage has final computed h value
+    // write back these h0 to h7 to memory starting from output_addr
     WRITE: begin
-      currentBlock <= 1;
-    if (offset < 8) begin
-        case (offset)
-            0: cur_write_data <= h0;
-            1: cur_write_data <= h1;
-            2: cur_write_data <= h2;
-            3: cur_write_data <= h3;
-            4: cur_write_data <= h4;
-            5: cur_write_data <= h5;
-            6: cur_write_data <= h6;
-            7: cur_write_data <= h7;
-        endcase
-        cur_we <= 1'b1;
-        offset <= offset + 1;
-    end else begin
-        state <= IDLE;
-    end
-    end
+			currentBlock <= 1;
+			case (writecase) //which write offset we are at
+				0: cur_write_data <= h0;				 
+				1: cur_write_data <= h1;				 
+				2: cur_write_data <= h2;			 
+				3: cur_write_data <= h3;				 
+				4: cur_write_data <= h4;				 
+				5: cur_write_data <= h5;			 
+				6: cur_write_data <= h6;				 
+				7: cur_write_data <= h7;				 
+				default: begin
+					state <= IDLE;
+				end
+			endcase
+      writecase = writecase + 1;
+			if(writecase) offset++;
+			// state <= WRITE;
+		end
+    // WRITE: begin
+    //   currentBlock <= 1;
+    // if (writecase < 8) begin
+    //     case (writecase)
+    //         0: cur_write_data <= h0;
+    //         1: cur_write_data <= h1;
+    //         2: cur_write_data <= h2;
+    //         3: cur_write_data <= h3;
+    //         4: cur_write_data <= h4;
+    //         5: cur_write_data <= h5;
+    //         6: cur_write_data <= h6;
+    //         7: cur_write_data <= h7;
+    //     endcase
+    //     //cur_we <= 1'b1;
+    //     if(writecase != 0) begin
+		// 	    offset <= offset + 1;
+    //     end
+    // end else begin
+    //     state <= IDLE;
+    // end
+    //   for(int k = 0; k < 7; k++) begin
+    //     cur_write_data <= 
+    //   end
+    // end
    endcase
   end
 
