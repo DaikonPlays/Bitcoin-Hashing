@@ -253,9 +253,10 @@ begin
     // h0 to h7 after compute stage has final computed h value
     // write back these h0 to h7 to memory starting from output_addr
     WRITE: begin
-       currentBlock <= 1;
-      cur_write_data <= hout[i];
-      state <= IDLE;
+        currentBlock <= 1;
+        if(i==nunm_nonces)
+        state <= IDLE;
+          cur_write_data <= hout[i];
       if (i != 0) offset++;
       i = i + 1;
     end
@@ -263,16 +264,7 @@ begin
 end
 
 assign done = (state == IDLE);
-			//currentBlock <= 1;
-      //      cur_write_data <= hout[i];
-		  //  state <= IDLE;
-			//if(i != 0) offset++;
-       //     i = i + 1;
-    //end
-   //endcase
-  //end
-
-//assign done = (state == IDLE);
+		
 
 
 endmodule
